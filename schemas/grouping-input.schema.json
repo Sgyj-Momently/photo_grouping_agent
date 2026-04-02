@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroupingInput",
+  "type": "object",
+  "required": ["photos"],
+  "properties": {
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["photo_id", "file_name"],
+        "properties": {
+          "photo_id": { "type": "string" },
+          "file_name": { "type": "string" },
+          "captured_at": { "type": ["string", "null"] },
+          "has_gps": { "type": ["boolean", "null"] },
+          "gps": {
+            "type": ["object", "null"],
+            "properties": {
+              "lat": { "type": ["number", "null"] },
+              "lon": { "type": ["number", "null"] }
+            }
+          },
+          "location_hint": { "type": ["string", "null"] },
+          "scene_type": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

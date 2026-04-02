@@ -1,0 +1,37 @@
+{
+  "photos": [
+    {
+      "photo_id": "p1",
+      "file_name": "IMG_0001.jpg",
+      "captured_at": "2026-04-10T09:00:00",
+      "has_gps": true,
+      "gps": {
+        "lat": 35.681,
+        "lon": 139.767
+      },
+      "location_hint": "도쿄역",
+      "scene_type": "city"
+    },
+    {
+      "photo_id": "p2",
+      "file_name": "IMG_0002.jpg",
+      "captured_at": "2026-04-10T09:20:00",
+      "has_gps": true,
+      "gps": {
+        "lat": 35.682,
+        "lon": 139.768
+      },
+      "location_hint": "도쿄역",
+      "scene_type": "city"
+    },
+    {
+      "photo_id": "p3",
+      "file_name": "IMG_0003.jpg",
+      "captured_at": "2026-04-10T12:00:00",
+      "has_gps": false,
+      "gps": null,
+      "location_hint": "아사쿠사",
+      "scene_type": "street"
+    }
+  ]
+}

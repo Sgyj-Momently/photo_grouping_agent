@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GroupingOutput",
+  "type": "object",
+  "required": ["group_count", "groups"],
+  "properties": {
+    "group_count": { "type": "integer" },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["group_id", "photo_ids", "group_reason"],
+        "properties": {
+          "group_id": { "type": "string" },
+          "start_time": { "type": ["string", "null"] },
+          "end_time": { "type": ["string", "null"] },
+          "photo_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "location_hint": { "type": ["string", "null"] },
+          "group_reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

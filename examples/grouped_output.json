@@ -1,0 +1,26 @@
+{
+  "group_count": 2,
+  "groups": [
+    {
+      "group_id": "group-001",
+      "start_time": "2026-04-10T09:00:00",
+      "end_time": "2026-04-10T09:20:00",
+      "photo_ids": [
+        "p1",
+        "p2"
+      ],
+      "location_hint": "도쿄역",
+      "group_reason": "time_window"
+    },
+    {
+      "group_id": "group-002",
+      "start_time": "2026-04-10T12:00:00",
+      "end_time": "2026-04-10T12:00:00",
+      "photo_ids": [
+        "p3"
+      ],
+      "location_hint": "아사쿠사",
+      "group_reason": "time_window"
+    }
+  ]
+}
