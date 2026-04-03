@@ -1,0 +1,98 @@
+{
+  "group_count": 5,
+  "groups": [
+    {
+      "group_id": "group-001",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-001",
+        "photo-002"
+      ],
+      "location_hint": "beach or seaside location",
+      "group_reason": "initial_group",
+      "score": 0.0,
+      "score_details": {}
+    },
+    {
+      "group_id": "group-002",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-003",
+        "photo-004"
+      ],
+      "location_hint": "City street",
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "shared_tags": [
+          "portrait"
+        ],
+        "conflicting_tags": true,
+        "shared_summary_words": [
+          "standing"
+        ]
+      }
+    },
+    {
+      "group_id": "group-003",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-005",
+        "photo-006",
+        "photo-007"
+      ],
+      "location_hint": null,
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "shared_tags": [],
+        "conflicting_tags": false,
+        "shared_summary_words": []
+      }
+    },
+    {
+      "group_id": "group-004",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-008"
+      ],
+      "location_hint": "Beach",
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "shared_tags": [],
+        "conflicting_tags": false,
+        "shared_summary_words": []
+      }
+    },
+    {
+      "group_id": "group-005",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-009",
+        "photo-010"
+      ],
+      "location_hint": null,
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "shared_tags": [],
+        "conflicting_tags": false,
+        "shared_summary_words": []
+      }
+    }
+  ]
+}

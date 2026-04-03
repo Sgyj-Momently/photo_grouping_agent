@@ -1,0 +1,85 @@
+{
+  "group_count": 1,
+  "groups": [
+    {
+      "group_id": "group-001",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-001",
+        "photo-002",
+        "photo-003",
+        "photo-004",
+        "photo-005",
+        "photo-006",
+        "photo-007",
+        "photo-008",
+        "photo-009",
+        "photo-010"
+      ],
+      "location_hint": "beach or seaside location",
+      "group_reason": "time_window"
+    }
+  ],
+  "grouping_llm": {
+    "enabled": true,
+    "model": "qwen2.5:14b",
+    "status": "error: ollama_request_failed (timed out)"
+  },
+  "comparison_results": {
+    "comparisons": [
+      {
+        "model": "qwen2.5:14b",
+        "status": "error: ollama_request_failed (timed out)",
+        "group_count": 1,
+        "groups": [
+          {
+            "group_id": "group-001",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-001",
+              "photo-002",
+              "photo-003",
+              "photo-004",
+              "photo-005",
+              "photo-006",
+              "photo-007",
+              "photo-008",
+              "photo-009",
+              "photo-010"
+            ],
+            "location_hint": "beach or seaside location",
+            "group_reason": "time_window"
+          }
+        ]
+      },
+      {
+        "model": "gemma4:e4b",
+        "status": "error: ollama_request_failed (HTTP Error 404: Not Found)",
+        "group_count": 1,
+        "groups": [
+          {
+            "group_id": "group-001",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-001",
+              "photo-002",
+              "photo-003",
+              "photo-004",
+              "photo-005",
+              "photo-006",
+              "photo-007",
+              "photo-008",
+              "photo-009",
+              "photo-010"
+            ],
+            "location_hint": "beach or seaside location",
+            "group_reason": "time_window"
+          }
+        ]
+      }
+    ]
+  }
+}
