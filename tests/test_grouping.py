@@ -38,6 +38,7 @@ class GroupPhotosTest(unittest.TestCase):
         self.assertEqual(result["group_count"], 2)
         self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
         self.assertEqual(result["groups"][1]["photo_ids"], ["p3"])
+        self.assertEqual(result["groups"][1]["group_reason"], "time_gap")
 
     def test_위치힌트가_있으면_그룹_메타에_대표값으로_남긴다(self) -> None:
         photos = [
@@ -76,6 +77,118 @@ class GroupPhotosTest(unittest.TestCase):
 
         self.assertEqual(result["group_count"], 1)
         self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
+
+    def test_촬영시각이_없어도_장면과_위치가_크게_다르면_분리한다(self) -> None:
+        photos = [
+            {
+                "photo_id": "p1",
+                "file_name": "IMG_0001.jpg",
+                "captured_at": None,
+                "location_hint": "beach",
+                "scene_type": "beach",
+                "summary": "people on the beach at sunset",
+            },
+            {
+                "photo_id": "p2",
+                "file_name": "IMG_0002.jpg",
+                "captured_at": None,
+                "location_hint": "city street",
+                "scene_type": "urban",
+                "summary": "night walk in a city street",
+            },
+        ]
+
+        result = group_photos(photos)
+
+        self.assertEqual(result["group_count"], 2)
+        self.assertEqual(result["groups"][0]["photo_ids"], ["p1"])
+        self.assertEqual(result["groups"][1]["photo_ids"], ["p2"])
+        self.assertEqual(result["groups"][1]["group_reason"], "semantic_split")
+
+    def test_시간이_없어도_의미가_유사하면_같은_그룹으로_유지한다(self) -> None:
+        photos = [
+            {
+                "photo_id": "p1",
+                "file_name": "IMG_0001.jpg",
+                "captured_at": None,
+                "location_hint": "beach",
+                "scene_type": "beach",
+                "summary": "people walking on a beach",
+            },
+            {
+                "photo_id": "p2",
+                "file_name": "IMG_0002.jpg",
+                "captured_at": None,
+                "location_hint": "seaside",
+                "scene_type": "beach",
+                "summary": "sunset near the beach with people",
+            },
+        ]
+
+        result = group_photos(photos)
+
+        self.assertEqual(result["group_count"], 1)
+        self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
+        self.assertEqual(result["groups"][0]["group_reason"], "initial_group")
+
+    def test_그룹에는_형성_근거_점수가_남는다(self) -> None:
+        photos = [
+            {
+                "photo_id": "p1",
+                "file_name": "IMG_0001.jpg",
+                "captured_at": None,
+                "location_hint": "beach",
+                "scene_type": "beach",
+                "summary": "people walking on a beach",
+            },
+            {
+                "photo_id": "p2",
+                "file_name": "IMG_0002.jpg",
+                "captured_at": None,
+                "location_hint": "city street",
+                "scene_type": "urban",
+                "summary": "night walk in a city street",
+            },
+        ]
+
+        result = group_photos(photos)
+
+        self.assertIn("score", result["groups"][0])
+        self.assertIn("score_details", result["groups"][0])
+
+    def test_beach와_urban은_같은_그룹으로_묶이지_않는다(self) -> None:
+        photos = [
+            {
+                "photo_id": "p1",
+                "file_name": "IMG_0001.jpg",
+                "captured_at": None,
+                "location_hint": "beach or seaside location",
+                "scene_type": "beach",
+                "summary": "Two people standing at the edge of a sandy beach near the water.",
+            },
+            {
+                "photo_id": "p2",
+                "file_name": "IMG_0002.jpg",
+                "captured_at": None,
+                "location_hint": "Coastal area",
+                "scene_type": "Outdoor",
+                "summary": "A person standing in front of a tall palm tree against a clear blue sky.",
+            },
+            {
+                "photo_id": "p3",
+                "file_name": "IMG_0003.jpg",
+                "captured_at": None,
+                "location_hint": "City street",
+                "scene_type": "Street",
+                "summary": "An Asian woman standing on an urban street at night.",
+            },
+        ]
+
+        result = group_photos(photos)
+
+        self.assertEqual(result["group_count"], 2)
+        self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
+        self.assertEqual(result["groups"][1]["photo_ids"], ["p3"])
 
 
 class RefineGroupsWithLlmTest(unittest.TestCase):
