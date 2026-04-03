@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -12,7 +13,7 @@ from urllib import request
 DEFAULT_TIME_WINDOW_MINUTES = 90
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_GROUPING_MODEL = "qwen2.5:14b"
-DEFAULT_COMPARE_MODELS = ["qwen2.5:14b", "gemma4:e4b"]
+DEFAULT_COMPARE_MODELS = ["qwen2.5:14b"]
 DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60
 
 
@@ -26,20 +27,43 @@ def group_photos(
     groups: list[dict[str, Any]] = []
 
     current_group: list[dict[str, Any]] = []
+    current_group_reason = "initial_group"
+    current_group_score = 0.0
+    current_group_score_details: dict[str, Any] = {}
     for photo in sorted_photos:
         if not current_group:
             current_group = [photo]
             continue
 
-        if _should_start_new_group(current_group[-1], photo, time_window_minutes):
-            groups.append(_build_group(group_index=len(groups), photos=current_group))
+        decision = _evaluate_group_boundary(current_group[-1], photo, time_window_minutes)
+        if decision["should_split"]:
+            groups.append(
+                _build_group(
+                    group_index=len(groups),
+                    photos=current_group,
+                    group_reason=current_group_reason,
+                    score=current_group_score,
+                    score_details=current_group_score_details,
+                )
+            )
             current_group = [photo]
+            current_group_reason = decision["reason"]
+            current_group_score = decision["score"]
+            current_group_score_details = decision["score_details"]
             continue
 
         current_group.append(photo)
 
     if current_group:
-        groups.append(_build_group(group_index=len(groups), photos=current_group))
+        groups.append(
+            _build_group(
+                group_index=len(groups),
+                photos=current_group,
+                group_reason=current_group_reason,
+                score=current_group_score,
+                score_details=current_group_score_details,
+            )
+        )
 
     return {
         "group_count": len(groups),
@@ -131,21 +155,31 @@ def _photo_sort_key(photo: dict[str, Any]) -> tuple[int, str]:
     return (1, photo.get("file_name", ""))
 
 
-def _should_start_new_group(
+def _evaluate_group_boundary(
     previous_photo: dict[str, Any],
     current_photo: dict[str, Any],
     time_window_minutes: int,
-) -> bool:
-    """기본 버전에서는 시간 차이가 임계값보다 크면 새 그룹을 시작한다."""
+) -> dict[str, Any]:
+    """시간 차이와 의미 차이를 함께 보고 새 그룹 시작 여부와 근거를 반환한다."""
 
     previous_time = _parse_datetime(previous_photo.get("captured_at"))
     current_time = _parse_datetime(current_photo.get("captured_at"))
 
-    if previous_time is None or current_time is None:
-        return False
+    if previous_time is not None and current_time is not None:
+        minutes_diff = (current_time - previous_time).total_seconds() / 60
+        if minutes_diff > time_window_minutes:
+            return {
+                "should_split": True,
+                "reason": "time_gap",
+                "score": float(minutes_diff),
+                "score_details": {
+                    "minutes_diff": round(minutes_diff, 2),
+                    "time_window_minutes": time_window_minutes,
+                },
+            }
 
-    minutes_diff = (current_time - previous_time).total_seconds() / 60
-    return minutes_diff > time_window_minutes
+    # 촬영 시각이 없거나 부족할 때는 장면/위치/요약 유사도로만 분리 여부를 본다.
+    return _evaluate_semantic_distance(previous_photo, current_photo)
 
 
 def _parse_datetime(raw_value: str | None) -> datetime | None:
@@ -156,8 +190,14 @@ def _parse_datetime(raw_value: str | None) -> datetime | None:
     return datetime.fromisoformat(raw_value)
 
 
-def _build_group(group_index: int, photos: list[dict[str, Any]]) -> dict[str, Any]:
-    """한 그룹의 대표 메타데이터를 계산한다."""
+def _build_group(
+    group_index: int,
+    photos: list[dict[str, Any]],
+    group_reason: str,
+    score: float,
+    score_details: dict[str, Any],
+) -> dict[str, Any]:
+    """한 그룹의 대표 메타데이터와 형성 근거를 계산한다."""
 
     start_time = next((photo.get("captured_at") for photo in photos if photo.get("captured_at")), None)
     end_time = next(
@@ -175,8 +215,192 @@ def _build_group(group_index: int, photos: list[dict[str, Any]]) -> dict[str, An
         "end_time": end_time,
         "photo_ids": [photo["photo_id"] for photo in photos],
         "location_hint": location_hint,
-        "group_reason": "time_window",
+        "group_reason": group_reason,
+        "score": score,
+        "score_details": score_details,
     }
+
+
+def _evaluate_semantic_distance(
+    previous_photo: dict[str, Any],
+    current_photo: dict[str, Any],
+) -> dict[str, Any]:
+    """시간 정보가 약할 때는 위치/장면/요약 유사도로 서로 다른 이벤트인지 추정한다."""
+
+    previous_scene = _normalize_text(previous_photo.get("scene_type"))
+    current_scene = _normalize_text(current_photo.get("scene_type"))
+    previous_location = _normalize_text(previous_photo.get("location_hint"))
+    current_location = _normalize_text(current_photo.get("location_hint"))
+
+    same_scene = bool(previous_scene and current_scene and previous_scene == current_scene)
+    same_location = bool(
+        previous_location
+        and current_location
+        and (
+            previous_location == current_location
+            or previous_location in current_location
+            or current_location in previous_location
+        )
+    )
+
+    previous_summary_words = _extract_keywords(previous_photo.get("summary"))
+    current_summary_words = _extract_keywords(current_photo.get("summary"))
+    shared_summary_words = previous_summary_words & current_summary_words
+    previous_tags = _derive_semantic_tags(previous_photo)
+    current_tags = _derive_semantic_tags(current_photo)
+    shared_tags = previous_tags & current_tags
+    conflicting_tags = _has_conflicting_tags(previous_tags, current_tags)
+
+    score = 0.0
+    if same_scene:
+        score += 2.0
+    if same_location:
+        score += 2.0
+    if len(shared_tags) >= 1:
+        score += 1.5
+    if len(shared_summary_words) >= 2:
+        score += 1.5
+    elif len(shared_summary_words) == 1:
+        score += 0.5
+    if conflicting_tags:
+        score -= 2.5
+
+    # 핵심 단서가 모두 다르면 다른 이벤트일 가능성이 크다고 보고 분리한다.
+    has_any_signal = any(
+        [
+            previous_scene,
+            current_scene,
+            previous_location,
+            current_location,
+            previous_summary_words,
+            current_summary_words,
+            previous_tags,
+            current_tags,
+        ]
+    )
+
+    if score > 0:
+        return {
+            "should_split": False,
+            "reason": "initial_group",
+            "score": score,
+            "score_details": {
+                "same_scene": same_scene,
+                "same_location": same_location,
+                "shared_tags": sorted(shared_tags),
+                "conflicting_tags": conflicting_tags,
+                "shared_summary_words": sorted(shared_summary_words),
+            },
+        }
+
+    if has_any_signal:
+        return {
+            "should_split": True,
+            "reason": "semantic_split",
+            "score": 0.0,
+            "score_details": {
+                "same_scene": same_scene,
+                "same_location": same_location,
+                "shared_tags": sorted(shared_tags),
+                "conflicting_tags": conflicting_tags,
+                "shared_summary_words": sorted(shared_summary_words),
+            },
+        }
+
+    return {
+        "should_split": False,
+        "reason": "fallback_missing_metadata",
+        "score": 0.0,
+        "score_details": {
+            "same_scene": same_scene,
+            "same_location": same_location,
+            "shared_tags": sorted(shared_tags),
+            "conflicting_tags": conflicting_tags,
+            "shared_summary_words": sorted(shared_summary_words),
+        },
+    }
+
+
+def _normalize_text(raw_value: str | None) -> str:
+    """비교에 필요한 텍스트를 소문자 기준으로 단순 정규화한다."""
+
+    if not raw_value:
+        return ""
+    return " ".join(raw_value.lower().split())
+
+
+def _extract_keywords(raw_value: str | None) -> set[str]:
+    """요약문에서 그룹화 비교에 쓸 핵심 단어 집합을 뽑는다."""
+
+    if not raw_value:
+        return set()
+
+    stopwords = {
+        "the",
+        "a",
+        "an",
+        "in",
+        "on",
+        "at",
+        "with",
+        "and",
+        "of",
+        "to",
+        "near",
+        "while",
+        "under",
+        "this",
+        "that",
+        "is",
+        "are",
+    }
+    words = {
+        word
+        for word in re.findall(r"[a-zA-Z]+", raw_value.lower())
+        if len(word) >= 4 and word not in stopwords
+    }
+    return words
+
+
+def _derive_semantic_tags(photo: dict[str, Any]) -> set[str]:
+    """scene_type, location_hint, summary에서 그룹화용 의미 태그를 추출한다."""
+
+    text = " ".join(
+        filter(
+            None,
+            [
+                _normalize_text(photo.get("scene_type")),
+                _normalize_text(photo.get("location_hint")),
+                _normalize_text(photo.get("summary")),
+            ],
+        )
+    )
+
+    tag_patterns = {
+        "beach": ["beach", "seaside", "coastal", "sand", "ocean", "sea", "sunset"],
+        "urban": ["urban", "city", "street", "building", "night", "cityscape"],
+        "portrait": ["person", "woman", "man", "people", "adult", "female"],
+        "nature": ["sky", "cloud", "sunset", "water", "outdoor"],
+    }
+
+    tags = set()
+    for tag, keywords in tag_patterns.items():
+        if any(keyword in text for keyword in keywords):
+            tags.add(tag)
+    return tags
+
+
+def _has_conflicting_tags(previous_tags: set[str], current_tags: set[str]) -> bool:
+    """서로 다른 이벤트일 가능성이 높은 의미 태그 조합인지 판정한다."""
+
+    conflicting_pairs = [
+        ({"beach"}, {"urban"}),
+        ({"nature"}, {"urban"}),
+    ]
+    for left, right in conflicting_pairs:
+        if (previous_tags & left and current_tags & right) or (previous_tags & right and current_tags & left):
+            return True
+    return False
 
 
 def _call_ollama_grouping_model(
@@ -211,7 +435,17 @@ def _call_ollama_grouping_model(
 def _build_grouping_prompt(photos: list[dict[str, Any]], grouping_result: dict[str, Any]) -> str:
     """LLM이 규칙 기반 그룹을 merge/split 보정하도록 입력 프롬프트를 만든다."""
 
-    photos_json = json.dumps(photos, ensure_ascii=False, indent=2)
+    compact_photos = [
+        {
+            "photo_id": photo.get("photo_id"),
+            "captured_at": photo.get("captured_at"),
+            "location_hint": photo.get("location_hint"),
+            "scene_type": photo.get("scene_type"),
+            "summary": photo.get("summary"),
+        }
+        for photo in photos
+    ]
+    photos_json = json.dumps(compact_photos, ensure_ascii=False, indent=2)
     grouping_json = json.dumps(grouping_result, ensure_ascii=False, indent=2)
     return f"""
 당신은 여행 사진 그룹화 전문가다.
