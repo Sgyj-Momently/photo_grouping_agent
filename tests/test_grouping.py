@@ -10,10 +10,14 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from group_photos import compare_grouping_models, group_photos, refine_groups_with_llm
+from group_photos import GroupingStrategy, compare_grouping_models, group_photos, refine_groups_with_llm
 
 
 class GroupPhotosTest(unittest.TestCase):
+    def test_그룹화_전략_enum은_허용된_값만_가진다(self) -> None:
+        self.assertEqual(GroupingStrategy.LOCATION_BASED.value, "LOCATION_BASED")
+        self.assertEqual(GroupingStrategy.FOOD_TYPE_BASED.value, "FOOD_TYPE_BASED")
+
     def test_시간_차이가_크면_새_그룹으로_분리한다(self) -> None:
         photos = [
             {
@@ -33,7 +37,11 @@ class GroupPhotosTest(unittest.TestCase):
             },
         ]
 
-        result = group_photos(photos, time_window_minutes=90)
+        result = group_photos(
+            photos,
+            grouping_strategy=GroupingStrategy.TIME_BASED,
+            time_window_minutes=90,
+        )
 
         self.assertEqual(result["group_count"], 2)
         self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
@@ -55,7 +63,7 @@ class GroupPhotosTest(unittest.TestCase):
             },
         ]
 
-        result = group_photos(photos)
+        result = group_photos(photos, grouping_strategy=GroupingStrategy.LOCATION_BASED)
 
         self.assertEqual(result["groups"][0]["location_hint"], "도쿄역")
 
@@ -73,7 +81,7 @@ class GroupPhotosTest(unittest.TestCase):
             },
         ]
 
-        result = group_photos(photos)
+        result = group_photos(photos, grouping_strategy=GroupingStrategy.TIME_BASED)
 
         self.assertEqual(result["group_count"], 1)
         self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
@@ -98,7 +106,7 @@ class GroupPhotosTest(unittest.TestCase):
             },
         ]
 
-        result = group_photos(photos)
+        result = group_photos(photos, grouping_strategy=GroupingStrategy.LOCATION_BASED)
 
         self.assertEqual(result["group_count"], 2)
         self.assertEqual(result["groups"][0]["photo_ids"], ["p1"])
@@ -125,7 +133,7 @@ class GroupPhotosTest(unittest.TestCase):
             },
         ]
 
-        result = group_photos(photos)
+        result = group_photos(photos, grouping_strategy=GroupingStrategy.LOCATION_BASED)
 
         self.assertEqual(result["group_count"], 1)
         self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
@@ -151,7 +159,7 @@ class GroupPhotosTest(unittest.TestCase):
             },
         ]
 
-        result = group_photos(photos)
+        result = group_photos(photos, grouping_strategy=GroupingStrategy.LOCATION_BASED)
 
         self.assertIn("score", result["groups"][0])
         self.assertIn("score_details", result["groups"][0])
@@ -184,7 +192,41 @@ class GroupPhotosTest(unittest.TestCase):
             },
         ]
 
-        result = group_photos(photos)
+        result = group_photos(photos, grouping_strategy=GroupingStrategy.LOCATION_BASED)
+
+    def test_음식전략은_음식_키워드가_같으면_같은_그룹으로_묶는다(self) -> None:
+        photos = [
+            {
+                "photo_id": "p1",
+                "file_name": "IMG_0001.jpg",
+                "captured_at": None,
+                "summary": "ramen bowl on the table",
+                "scene_type": "food",
+                "location_hint": "tokyo",
+            },
+            {
+                "photo_id": "p2",
+                "file_name": "IMG_0002.jpg",
+                "captured_at": None,
+                "summary": "close-up of ramen with egg",
+                "scene_type": "food",
+                "location_hint": "osaka",
+            },
+            {
+                "photo_id": "p3",
+                "file_name": "IMG_0003.jpg",
+                "captured_at": None,
+                "summary": "strawberry cake dessert on a plate",
+                "scene_type": "food",
+                "location_hint": "osaka",
+            },
+        ]
+
+        result = group_photos(photos, grouping_strategy=GroupingStrategy.FOOD_TYPE_BASED)
+
+        self.assertEqual(result["group_count"], 2)
+        self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
+        self.assertEqual(result["groups"][1]["photo_ids"], ["p3"])
 
         self.assertEqual(result["group_count"], 2)
         self.assertEqual(result["groups"][0]["photo_ids"], ["p1", "p2"])
