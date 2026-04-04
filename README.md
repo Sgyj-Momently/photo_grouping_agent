@@ -13,6 +13,7 @@
 - 시간 차이 기준 1차 그룹화
 - GPS/위치 힌트 비교를 위한 확장 지점 제공
 - 그룹별 시작 시각, 종료 시각, 사진 목록 생성
+- enum 기반 그룹화 전략 선택
 - 선택한 Ollama 텍스트 모델로 그룹 보정
 - `qwen2.5`와 `gemma4` 비교 실험 결과 저장
 
@@ -28,10 +29,24 @@
 python3 src/group_photos.py --input ./examples/photo_info_input.json --output ./examples/grouped_output.json
 ```
 
+## FastAPI 실행
+
+```bash
+pip install -r requirements.txt
+uvicorn src.api_server:app --reload
+```
+
+실행 후 아래 주소에서 확인할 수 있다.
+
+- Swagger UI: `http://127.0.0.1:8000/docs`
+- OpenAPI JSON: `http://127.0.0.1:8000/openapi.json`
+- Health: `http://127.0.0.1:8000/health`
+
 ```bash
 python3 src/group_photos.py \
   --input ./examples/photo_info_input.json \
   --output ./examples/grouped_output.json \
+  --grouping-strategy LOCATION_BASED \
   --enable-llm-refinement \
   --grouping-model qwen2.5:14b
 ```
@@ -65,6 +80,7 @@ PYTHONPYCACHEPREFIX=.pycache python3 -m unittest discover -s tests
 
 ```json
 {
+  "grouping_strategy": "LOCATION_BASED",
   "photos": [
     {
       "photo_id": "p1",
@@ -83,6 +99,7 @@ PYTHONPYCACHEPREFIX=.pycache python3 -m unittest discover -s tests
 
 ```json
 {
+  "grouping_strategy": "LOCATION_BASED",
   "group_count": 1,
   "groups": [
     {
@@ -91,11 +108,29 @@ PYTHONPYCACHEPREFIX=.pycache python3 -m unittest discover -s tests
       "end_time": "2026-04-10T09:20:00",
       "photo_ids": ["p1", "p2"],
       "location_hint": "도쿄역",
-      "group_reason": "time_window"
+      "group_reason": "initial_group",
+      "score": 3.5,
+      "score_details": {
+        "strategy": "LOCATION_BASED"
+      }
     }
   ]
 }
 ```
+
+## 그룹화 전략
+
+- `TIME_BASED`: 촬영 시각 중심
+- `LOCATION_BASED`: GPS, location_hint, 장소 의미 중심
+- `SCENE_BASED`: 장면 분류와 요약 의미 중심
+- `FOOD_TYPE_BASED`: 음식 종류 중심
+- `STORY_FLOW_BASED`: 여행 흐름 중심
+
+## API 명세
+
+- 사람 친화 문서: [docs/api-spec.md](./docs/api-spec.md)
+- OpenAPI 초안: [docs/openapi.yaml](./docs/openapi.yaml)
+- FastAPI 런타임 문서: `/docs`
 
 ## 모델 추천
 

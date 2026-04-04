@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+
+from src.group_photos import (
+    DEFAULT_GROUPING_MODEL,
+    DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OLLAMA_TIMEOUT_SECONDS,
+    DEFAULT_TIME_WINDOW_MINUTES,
+    GroupingStrategy,
+    compare_grouping_models,
+    group_photos,
+    refine_groups_with_llm,
+)
+
+
+app = FastAPI(
+    title="Photo Grouping Agent API",
+    version="1.0.0",
+    description="사진 정보 목록을 받아 그룹화 결과를 반환하는 에이전트 API",
+)
+
+
+class GpsPayload(BaseModel):
+    lat: float | None = None
+    lon: float | None = None
+
+
+class PhotoPayload(BaseModel):
+    photo_id: str
+    file_name: str
+    captured_at: str | None = None
+    has_gps: bool | None = None
+    gps: GpsPayload | None = None
+    location_hint: str | None = None
+    scene_type: str | None = None
+    summary: str | None = None
+    subjects: list[str] = Field(default_factory=list)
+
+
+class GroupingRequest(BaseModel):
+    project_id: str
+    grouping_strategy: GroupingStrategy
+    time_window_minutes: int = DEFAULT_TIME_WINDOW_MINUTES
+    enable_llm_refinement: bool = False
+    grouping_model: str = DEFAULT_GROUPING_MODEL
+    compare_models: list[str] = Field(default_factory=list)
+    ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
+    ollama_timeout_seconds: int = DEFAULT_OLLAMA_TIMEOUT_SECONDS
+    photos: list[PhotoPayload]
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    """오케스트레이터에서 살아있는지 확인하는 단순 헬스 체크."""
+
+    return {"status": "ok"}
+
+
+@app.post("/api/v1/photo-groups")
+def create_photo_groups(request: GroupingRequest) -> dict[str, Any]:
+    """정해진 그룹화 전략으로 사진 그룹을 생성한다."""
+
+    photos = [photo.model_dump() for photo in request.photos]
+    base_result = group_photos(
+        photos,
+        grouping_strategy=request.grouping_strategy,
+        time_window_minutes=request.time_window_minutes,
+    )
+    result: dict[str, Any] = base_result
+
+    if request.enable_llm_refinement:
+        result = refine_groups_with_llm(
+            photos=photos,
+            grouping_result=base_result,
+            model_name=request.grouping_model,
+            base_url=request.ollama_base_url,
+            timeout_seconds=request.ollama_timeout_seconds,
+        )
+
+    if request.compare_models:
+        result["comparison_results"] = compare_grouping_models(
+            photos=photos,
+            grouping_result=base_result,
+            model_names=request.compare_models,
+            base_url=request.ollama_base_url,
+            timeout_seconds=request.ollama_timeout_seconds,
+        )
+
+    result["project_id"] = request.project_id
+    return result

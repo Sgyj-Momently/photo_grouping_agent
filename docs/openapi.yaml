@@ -1,0 +1,153 @@
+openapi: 3.1.0
+info:
+  title: Photo Grouping Agent API
+  version: 1.0.0
+paths:
+  /api/v1/photo-groups:
+    post:
+      summary: Group photos by a predefined grouping strategy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhotoGroupingRequest'
+      responses:
+        '200':
+          description: Grouping result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoGroupingResponse'
+        '400':
+          description: Invalid request
+components:
+  schemas:
+    GroupingStrategy:
+      type: string
+      enum:
+        - TIME_BASED
+        - LOCATION_BASED
+        - SCENE_BASED
+        - FOOD_TYPE_BASED
+        - STORY_FLOW_BASED
+    PhotoInfo:
+      type: object
+      required:
+        - photo_id
+        - file_name
+      properties:
+        photo_id:
+          type: string
+        file_name:
+          type: string
+        captured_at:
+          type:
+            - string
+            - "null"
+        has_gps:
+          type:
+            - boolean
+            - "null"
+        gps:
+          type:
+            - object
+            - "null"
+        location_hint:
+          type:
+            - string
+            - "null"
+        scene_type:
+          type:
+            - string
+            - "null"
+        summary:
+          type:
+            - string
+            - "null"
+        subjects:
+          type: array
+          items:
+            type: string
+    PhotoGroupingRequest:
+      type: object
+      required:
+        - project_id
+        - grouping_strategy
+        - photos
+      properties:
+        project_id:
+          type: string
+        grouping_strategy:
+          $ref: '#/components/schemas/GroupingStrategy'
+        time_window_minutes:
+          type: integer
+        enable_llm_refinement:
+          type: boolean
+        grouping_model:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoInfo'
+    PhotoGroup:
+      type: object
+      required:
+        - group_id
+        - photo_ids
+        - group_reason
+      properties:
+        group_id:
+          type: string
+        start_time:
+          type:
+            - string
+            - "null"
+        end_time:
+          type:
+            - string
+            - "null"
+        photo_ids:
+          type: array
+          items:
+            type: string
+        location_hint:
+          type:
+            - string
+            - "null"
+        group_reason:
+          type: string
+        score:
+          type:
+            - number
+            - "null"
+        score_details:
+          type:
+            - object
+            - "null"
+    GroupingLlm:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        model:
+          type: string
+        status:
+          type: string
+    PhotoGroupingResponse:
+      type: object
+      required:
+        - grouping_strategy
+        - group_count
+        - groups
+      properties:
+        grouping_strategy:
+          $ref: '#/components/schemas/GroupingStrategy'
+        group_count:
+          type: integer
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoGroup'
+        grouping_llm:
+          $ref: '#/components/schemas/GroupingLlm'
