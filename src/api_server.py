@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from typing import List, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
@@ -25,20 +26,20 @@ app = FastAPI(
 
 
 class GpsPayload(BaseModel):
-    lat: float | None = None
-    lon: float | None = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 class PhotoPayload(BaseModel):
     photo_id: str
     file_name: str
-    captured_at: str | None = None
-    has_gps: bool | None = None
-    gps: GpsPayload | None = None
-    location_hint: str | None = None
-    scene_type: str | None = None
-    summary: str | None = None
-    subjects: list[str] = Field(default_factory=list)
+    captured_at: Optional[str] = None
+    has_gps: Optional[bool] = None
+    gps: Optional[GpsPayload] = None
+    location_hint: Optional[str] = None
+    scene_type: Optional[str] = None
+    summary: Optional[str] = None
+    subjects: List[str] = Field(default_factory=list)
 
 
 class GroupingRequest(BaseModel):
@@ -47,10 +48,10 @@ class GroupingRequest(BaseModel):
     time_window_minutes: int = DEFAULT_TIME_WINDOW_MINUTES
     enable_llm_refinement: bool = False
     grouping_model: str = DEFAULT_GROUPING_MODEL
-    compare_models: list[str] = Field(default_factory=list)
+    compare_models: List[str] = Field(default_factory=list)
     ollama_base_url: str = DEFAULT_OLLAMA_BASE_URL
     ollama_timeout_seconds: int = DEFAULT_OLLAMA_TIMEOUT_SECONDS
-    photos: list[PhotoPayload]
+    photos: List[PhotoPayload]
 
 
 @app.get("/health")
