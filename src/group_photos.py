@@ -4,6 +4,7 @@ import argparse
 import copy
 import json
 import re
+from enum import Enum
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -17,8 +18,19 @@ DEFAULT_COMPARE_MODELS = ["qwen2.5:14b"]
 DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60
 
 
+class GroupingStrategy(str, Enum):
+    """허용된 그룹화 전략 집합."""
+
+    TIME_BASED = "TIME_BASED"
+    LOCATION_BASED = "LOCATION_BASED"
+    SCENE_BASED = "SCENE_BASED"
+    FOOD_TYPE_BASED = "FOOD_TYPE_BASED"
+    STORY_FLOW_BASED = "STORY_FLOW_BASED"
+
+
 def group_photos(
     photos: list[dict[str, Any]],
+    grouping_strategy: GroupingStrategy = GroupingStrategy.LOCATION_BASED,
     time_window_minutes: int = DEFAULT_TIME_WINDOW_MINUTES,
 ) -> dict[str, Any]:
     """사진 목록을 시간 기준으로 그룹화해 후속 에이전트가 쓰기 쉬운 구조로 변환한다."""
@@ -35,7 +47,12 @@ def group_photos(
             current_group = [photo]
             continue
 
-        decision = _evaluate_group_boundary(current_group[-1], photo, time_window_minutes)
+        decision = _evaluate_group_boundary(
+            current_group[-1],
+            photo,
+            grouping_strategy=grouping_strategy,
+            time_window_minutes=time_window_minutes,
+        )
         if decision["should_split"]:
             groups.append(
                 _build_group(
@@ -66,6 +83,7 @@ def group_photos(
         )
 
     return {
+        "grouping_strategy": grouping_strategy.value,
         "group_count": len(groups),
         "groups": groups,
     }
@@ -158,9 +176,16 @@ def _photo_sort_key(photo: dict[str, Any]) -> tuple[int, str]:
 def _evaluate_group_boundary(
     previous_photo: dict[str, Any],
     current_photo: dict[str, Any],
+    grouping_strategy: GroupingStrategy,
     time_window_minutes: int,
 ) -> dict[str, Any]:
     """시간 차이와 의미 차이를 함께 보고 새 그룹 시작 여부와 근거를 반환한다."""
+
+    if grouping_strategy == GroupingStrategy.TIME_BASED:
+        return _evaluate_time_priority_boundary(previous_photo, current_photo, time_window_minutes)
+
+    if grouping_strategy == GroupingStrategy.FOOD_TYPE_BASED:
+        return _evaluate_food_type_boundary(previous_photo, current_photo)
 
     previous_time = _parse_datetime(previous_photo.get("captured_at"))
     current_time = _parse_datetime(current_photo.get("captured_at"))
@@ -179,7 +204,50 @@ def _evaluate_group_boundary(
             }
 
     # 촬영 시각이 없거나 부족할 때는 장면/위치/요약 유사도로만 분리 여부를 본다.
-    return _evaluate_semantic_distance(previous_photo, current_photo)
+    return _evaluate_semantic_distance(previous_photo, current_photo, grouping_strategy)
+
+
+def _evaluate_time_priority_boundary(
+    previous_photo: dict[str, Any],
+    current_photo: dict[str, Any],
+    time_window_minutes: int,
+) -> dict[str, Any]:
+    """시간 중심 전략에서는 시간 단서를 가장 우선한다."""
+
+    previous_time = _parse_datetime(previous_photo.get("captured_at"))
+    current_time = _parse_datetime(current_photo.get("captured_at"))
+
+    if previous_time is None or current_time is None:
+        return {
+            "should_split": False,
+            "reason": "fallback_missing_metadata",
+            "score": 0.0,
+            "score_details": {"strategy": GroupingStrategy.TIME_BASED.value},
+        }
+
+    minutes_diff = (current_time - previous_time).total_seconds() / 60
+    if minutes_diff > time_window_minutes:
+        return {
+            "should_split": True,
+            "reason": "time_gap",
+            "score": float(minutes_diff),
+            "score_details": {
+                "strategy": GroupingStrategy.TIME_BASED.value,
+                "minutes_diff": round(minutes_diff, 2),
+                "time_window_minutes": time_window_minutes,
+            },
+        }
+
+    return {
+        "should_split": False,
+        "reason": "initial_group",
+        "score": max(0.0, float(time_window_minutes - minutes_diff)),
+        "score_details": {
+            "strategy": GroupingStrategy.TIME_BASED.value,
+            "minutes_diff": round(minutes_diff, 2),
+            "time_window_minutes": time_window_minutes,
+        },
+    }
 
 
 def _parse_datetime(raw_value: str | None) -> datetime | None:
@@ -224,6 +292,7 @@ def _build_group(
 def _evaluate_semantic_distance(
     previous_photo: dict[str, Any],
     current_photo: dict[str, Any],
+    grouping_strategy: GroupingStrategy,
 ) -> dict[str, Any]:
     """시간 정보가 약할 때는 위치/장면/요약 유사도로 서로 다른 이벤트인지 추정한다."""
 
@@ -246,8 +315,8 @@ def _evaluate_semantic_distance(
     previous_summary_words = _extract_keywords(previous_photo.get("summary"))
     current_summary_words = _extract_keywords(current_photo.get("summary"))
     shared_summary_words = previous_summary_words & current_summary_words
-    previous_tags = _derive_semantic_tags(previous_photo)
-    current_tags = _derive_semantic_tags(current_photo)
+    previous_tags = _derive_semantic_tags(previous_photo, grouping_strategy)
+    current_tags = _derive_semantic_tags(current_photo, grouping_strategy)
     shared_tags = previous_tags & current_tags
     conflicting_tags = _has_conflicting_tags(previous_tags, current_tags)
 
@@ -287,6 +356,7 @@ def _evaluate_semantic_distance(
             "score_details": {
                 "same_scene": same_scene,
                 "same_location": same_location,
+                "strategy": grouping_strategy.value,
                 "shared_tags": sorted(shared_tags),
                 "conflicting_tags": conflicting_tags,
                 "shared_summary_words": sorted(shared_summary_words),
@@ -301,6 +371,7 @@ def _evaluate_semantic_distance(
             "score_details": {
                 "same_scene": same_scene,
                 "same_location": same_location,
+                "strategy": grouping_strategy.value,
                 "shared_tags": sorted(shared_tags),
                 "conflicting_tags": conflicting_tags,
                 "shared_summary_words": sorted(shared_summary_words),
@@ -314,11 +385,53 @@ def _evaluate_semantic_distance(
         "score_details": {
             "same_scene": same_scene,
             "same_location": same_location,
+            "strategy": grouping_strategy.value,
             "shared_tags": sorted(shared_tags),
             "conflicting_tags": conflicting_tags,
             "shared_summary_words": sorted(shared_summary_words),
         },
     }
+
+
+def _evaluate_food_type_boundary(
+    previous_photo: dict[str, Any],
+    current_photo: dict[str, Any],
+) -> dict[str, Any]:
+    """음식 후기 전략에서는 음식 종류 태그가 가장 중요한 기준이 된다."""
+
+    previous_tags = _derive_semantic_tags(previous_photo, GroupingStrategy.FOOD_TYPE_BASED)
+    current_tags = _derive_semantic_tags(current_photo, GroupingStrategy.FOOD_TYPE_BASED)
+    shared_food_tags = previous_tags & current_tags
+
+    if shared_food_tags:
+        return {
+            "should_split": False,
+            "reason": "initial_group",
+            "score": 3.0,
+            "score_details": {
+                "strategy": GroupingStrategy.FOOD_TYPE_BASED.value,
+                "shared_food_tags": sorted(shared_food_tags),
+            },
+        }
+
+    has_food_signal = bool(previous_tags or current_tags)
+    if has_food_signal:
+        return {
+            "should_split": True,
+            "reason": "food_type_split",
+            "score": 0.0,
+            "score_details": {
+                "strategy": GroupingStrategy.FOOD_TYPE_BASED.value,
+                "previous_food_tags": sorted(previous_tags),
+                "current_food_tags": sorted(current_tags),
+            },
+        }
+
+    return _evaluate_semantic_distance(
+        previous_photo,
+        current_photo,
+        GroupingStrategy.FOOD_TYPE_BASED,
+    )
 
 
 def _normalize_text(raw_value: str | None) -> str:
@@ -362,7 +475,7 @@ def _extract_keywords(raw_value: str | None) -> set[str]:
     return words
 
 
-def _derive_semantic_tags(photo: dict[str, Any]) -> set[str]:
+def _derive_semantic_tags(photo: dict[str, Any], grouping_strategy: GroupingStrategy) -> set[str]:
     """scene_type, location_hint, summary에서 그룹화용 의미 태그를 추출한다."""
 
     text = " ".join(
@@ -381,12 +494,31 @@ def _derive_semantic_tags(photo: dict[str, Any]) -> set[str]:
         "urban": ["urban", "city", "street", "building", "night", "cityscape"],
         "portrait": ["person", "woman", "man", "people", "adult", "female"],
         "nature": ["sky", "cloud", "sunset", "water", "outdoor"],
+        "ramen": ["ramen", "noodle", "broth"],
+        "dessert": ["dessert", "cake", "cookie", "icecream", "ice", "sweet"],
+        "coffee": ["coffee", "latte", "espresso", "cafe"],
+        "meat": ["steak", "bbq", "barbecue", "grill", "meat"],
     }
 
     tags = set()
     for tag, keywords in tag_patterns.items():
         if any(keyword in text for keyword in keywords):
             tags.add(tag)
+
+    if grouping_strategy == GroupingStrategy.FOOD_TYPE_BASED:
+        return {
+            tag
+            for tag in tags
+            if tag in {"ramen", "dessert", "coffee", "meat"}
+        }
+
+    if grouping_strategy == GroupingStrategy.SCENE_BASED:
+        return {
+            tag
+            for tag in tags
+            if tag in {"beach", "urban", "portrait", "nature"}
+        }
+
     return tags
 
 
@@ -484,6 +616,12 @@ def main() -> None:
     parser.add_argument("--input", required=True, help="Input JSON path")
     parser.add_argument("--output", required=True, help="Output JSON path")
     parser.add_argument(
+        "--grouping-strategy",
+        default=GroupingStrategy.LOCATION_BASED.value,
+        choices=[strategy.value for strategy in GroupingStrategy],
+        help="Grouping strategy enum value",
+    )
+    parser.add_argument(
         "--time-window-minutes",
         type=int,
         default=DEFAULT_TIME_WINDOW_MINUTES,
@@ -521,7 +659,12 @@ def main() -> None:
     input_path = Path(args.input)
     output_path = Path(args.output)
     payload = json.loads(input_path.read_text(encoding="utf-8"))
-    base_result = group_photos(payload["photos"], time_window_minutes=args.time_window_minutes)
+    grouping_strategy = GroupingStrategy(args.grouping_strategy)
+    base_result = group_photos(
+        payload["photos"],
+        grouping_strategy=grouping_strategy,
+        time_window_minutes=args.time_window_minutes,
+    )
     result = base_result
 
     if args.enable_llm_refinement:

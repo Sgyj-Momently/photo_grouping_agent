@@ -2,8 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "GroupingOutput",
   "type": "object",
-  "required": ["group_count", "groups"],
+  "required": ["grouping_strategy", "group_count", "groups"],
   "properties": {
+    "grouping_strategy": { "type": "string" },
     "group_count": { "type": "integer" },
     "groups": {
       "type": "array",
@@ -19,7 +20,9 @@
             "items": { "type": "string" }
           },
           "location_hint": { "type": ["string", "null"] },
-          "group_reason": { "type": "string" }
+          "group_reason": { "type": "string" },
+          "score": { "type": ["number", "null"] },
+          "score_details": { "type": ["object", "null"] }
         }
       }
     }

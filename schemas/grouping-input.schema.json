@@ -2,8 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "GroupingInput",
   "type": "object",
-  "required": ["photos"],
+  "required": ["grouping_strategy", "photos"],
   "properties": {
+    "grouping_strategy": {
+      "type": "string",
+      "enum": [
+        "TIME_BASED",
+        "LOCATION_BASED",
+        "SCENE_BASED",
+        "FOOD_TYPE_BASED",
+        "STORY_FLOW_BASED"
+      ]
+    },
     "photos": {
       "type": "array",
       "items": {
@@ -22,7 +32,12 @@
             }
           },
           "location_hint": { "type": ["string", "null"] },
-          "scene_type": { "type": ["string", "null"] }
+          "scene_type": { "type": ["string", "null"] },
+          "summary": { "type": ["string", "null"] },
+          "subjects": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         }
       }
     }

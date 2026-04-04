@@ -1,0 +1,138 @@
+{
+  "grouping_strategy": "LOCATION_BASED",
+  "photos": [
+    {
+      "photo_id": "photo-001",
+      "file_name": "3472487552658267452_20221213175124591.jpg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": "beach or seaside location",
+      "scene_type": "beach",
+      "summary": "Two people standing at the edge of a sandy beach near the water, under clear blue skies.",
+      "subjects": [
+        "two adults"
+      ],
+      "source_path": "input_photos/3472487552658267452_20221213175124591.jpg"
+    },
+    {
+      "photo_id": "photo-002",
+      "file_name": "3472487577508871484_20220930113224152.jpg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": "Coastal area",
+      "scene_type": "Outdoor",
+      "summary": "A person standing in front of a tall palm tree against a clear blue sky.",
+      "subjects": [
+        "person"
+      ],
+      "source_path": "input_photos/3472487577508871484_20220930113224152.jpg"
+    },
+    {
+      "photo_id": "photo-003",
+      "file_name": "355012967895561_20230929164717317.jpeg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": "City street",
+      "scene_type": "Street",
+      "summary": "An Asian woman with a scarf around her neck, looking at the camera while standing on an urban street.",
+      "subjects": [
+        "Asian female"
+      ],
+      "source_path": "input_photos/355012967895561_20230929164717317.jpeg"
+    },
+    {
+      "photo_id": "photo-004",
+      "file_name": "355012972275209_20230929164627920.jpeg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": "city at night",
+      "scene_type": "urban",
+      "summary": "A person taking a picture in the night with a cityscape, street lights and buildings in the background.",
+      "subjects": [
+        "person"
+      ],
+      "source_path": "input_photos/355012972275209_20230929164627920.jpeg"
+    },
+    {
+      "photo_id": "photo-005",
+      "file_name": "355017243046153_20230929164935173.jpeg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": null,
+      "scene_type": null,
+      "summary": null,
+      "subjects": [],
+      "source_path": "input_photos/355017243046153_20230929164935173.jpeg"
+    },
+    {
+      "photo_id": "photo-006",
+      "file_name": "IMG_0819.jpeg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": null,
+      "scene_type": null,
+      "summary": null,
+      "subjects": [],
+      "source_path": "input_photos/IMG_0819.jpeg"
+    },
+    {
+      "photo_id": "photo-007",
+      "file_name": "IMG_2061.jpg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": null,
+      "scene_type": null,
+      "summary": null,
+      "subjects": [],
+      "source_path": "input_photos/IMG_2061.jpg"
+    },
+    {
+      "photo_id": "photo-008",
+      "file_name": "IMG_2991.jpeg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": "Beach",
+      "scene_type": "Nature",
+      "summary": "Beautiful sunset at a beach",
+      "subjects": [
+        "Sunset",
+        "Sky",
+        "Clouds",
+        "People"
+      ],
+      "source_path": "input_photos/IMG_2991.jpeg"
+    },
+    {
+      "photo_id": "photo-009",
+      "file_name": "IMG_5126.jpg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": null,
+      "scene_type": null,
+      "summary": null,
+      "subjects": [],
+      "source_path": "input_photos/IMG_5126.jpg"
+    },
+    {
+      "photo_id": "photo-010",
+      "file_name": "SE-20AF6AB6-C1D2-46C8-AB63-6DF39AE347F4.jpg",
+      "captured_at": null,
+      "has_gps": false,
+      "gps": null,
+      "location_hint": null,
+      "scene_type": null,
+      "summary": null,
+      "subjects": [],
+      "source_path": "input_photos/SE-20AF6AB6-C1D2-46C8-AB63-6DF39AE347F4.jpg"
+    }
+  ]
+}
