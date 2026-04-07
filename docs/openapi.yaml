@@ -86,6 +86,10 @@ components:
           type: boolean
         grouping_model:
           type: string
+        compare_models:
+          type: array
+          items:
+            type: string
         photos:
           type: array
           items:
