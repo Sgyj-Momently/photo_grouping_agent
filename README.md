@@ -74,6 +74,19 @@ python3 src/adapt_photo_info.py \
 PYTHONPYCACHEPREFIX=.pycache python3 -m unittest discover -s tests
 ```
 
+운영 전 표준 검증은 coverage gate까지 포함한 아래 명령을 사용한다.
+
+```bash
+scripts/verify.sh
+```
+
+수동으로 커버리지를 확인하려면:
+
+```bash
+python3 -m coverage run --source=src -m unittest discover -s tests
+python3 -m coverage report -m --fail-under=85
+```
+
 ## 입력 개요
 
 입력은 사진 정보 추출 에이전트의 결과 목록을 사용한다.

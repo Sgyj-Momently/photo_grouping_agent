@@ -7,7 +7,7 @@ from typing import List, Optional
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from src.group_photos import (
+from .group_photos import (
     DEFAULT_GROUPING_MODEL,
     DEFAULT_OLLAMA_BASE_URL,
     DEFAULT_OLLAMA_TIMEOUT_SECONDS,
