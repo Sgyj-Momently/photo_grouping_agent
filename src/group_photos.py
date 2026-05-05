@@ -567,21 +567,11 @@ def _call_ollama_grouping_model(
 def _build_grouping_prompt(photos: list[dict[str, Any]], grouping_result: dict[str, Any]) -> str:
     """LLM이 규칙 기반 그룹을 merge/split 보정하도록 입력 프롬프트를 만든다."""
 
-    compact_photos = [
-        {
-            "photo_id": photo.get("photo_id"),
-            "captured_at": photo.get("captured_at"),
-            "location_hint": photo.get("location_hint"),
-            "scene_type": photo.get("scene_type"),
-            "summary": photo.get("summary"),
-        }
-        for photo in photos
-    ]
-    photos_json = json.dumps(compact_photos, ensure_ascii=False, indent=2)
-    grouping_json = json.dumps(grouping_result, ensure_ascii=False, indent=2)
+    context = _build_grouping_llm_context(photos=photos, grouping_result=grouping_result)
+    context_json = json.dumps(context, ensure_ascii=False, indent=2)
     return f"""
 당신은 여행 사진 그룹화 전문가다.
-입력으로 사진 목록과 규칙 기반 1차 그룹화 결과가 주어진다.
+입력으로 규칙 기반 1차 그룹 후보와 후보 안의 사진 요약이 주어진다.
 해야 할 일은 1차 그룹화를 검토하고, 같은 이벤트는 합치고 다른 이벤트는 나누는 것이다.
 
 판단 기준:
@@ -590,11 +580,8 @@ def _build_grouping_prompt(photos: list[dict[str, Any]], grouping_result: dict[s
 - scene_type과 요약의 유사성
 - 여행 일정상 자연스러운 흐름
 
-사진 목록:
-{photos_json}
-
-규칙 기반 그룹화 결과:
-{grouping_json}
+그룹 후보:
+{context_json}
 
 반드시 아래 JSON 객체만 반환하라. 설명, 코드블록, 마크다운 없이 JSON만 출력하라.
 키는 정확히 다음만 사용하라.
@@ -609,6 +596,59 @@ def _build_grouping_prompt(photos: list[dict[str, Any]], grouping_result: dict[s
 - location_hint: string | null
 - group_reason: string
 """.strip()
+
+
+def _build_grouping_llm_context(photos: list[dict[str, Any]], grouping_result: dict[str, Any]) -> dict[str, Any]:
+    """LLM 보정에 필요한 그룹 후보 중심의 축약 입력을 만든다."""
+
+    photo_by_id = {photo.get("photo_id"): photo for photo in photos}
+    groups = []
+    for group in grouping_result.get("groups", []):
+        photo_ids = group.get("photo_ids", [])
+        groups.append(
+            {
+                "group_id": group.get("group_id"),
+                "start_time": group.get("start_time"),
+                "end_time": group.get("end_time"),
+                "photo_ids": photo_ids,
+                "location_hint": group.get("location_hint"),
+                "group_reason": group.get("group_reason"),
+                "score": group.get("score"),
+                "score_details": group.get("score_details", {}),
+                "photos": [
+                    _compact_photo_for_llm(photo_by_id[photo_id])
+                    for photo_id in photo_ids
+                    if photo_id in photo_by_id
+                ],
+            }
+        )
+
+    return {
+        "grouping_strategy": grouping_result.get("grouping_strategy"),
+        "group_count": grouping_result.get("group_count", len(groups)),
+        "groups": groups,
+    }
+
+
+def _compact_photo_for_llm(photo: dict[str, Any]) -> dict[str, Any]:
+    """사진 원본 계약에서 그룹 보정에 직접 필요한 필드만 남긴다."""
+
+    return {
+        "photo_id": photo.get("photo_id"),
+        "captured_at": photo.get("captured_at"),
+        "location_hint": photo.get("location_hint"),
+        "scene_type": photo.get("scene_type"),
+        "summary": _truncate_text(photo.get("summary"), 240),
+        "subjects": list(photo.get("subjects", []))[:5],
+    }
+
+
+def _truncate_text(value: str | None, limit: int) -> str | None:
+    """LLM 입력 폭주를 막기 위해 긴 요약을 고정 길이로 자른다."""
+
+    if value is None or len(value) <= limit:
+        return value
+    return value[: limit - 3].rstrip() + "..."
 
 
 def main() -> None:

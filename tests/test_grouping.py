@@ -397,6 +397,49 @@ class CompareGroupingModelsTest(unittest.TestCase):
 
 
 class OllamaGroupingClientTest(unittest.TestCase):
+    def test_llm_프롬프트는_그룹_후보_중심으로_입력을_축약한다(self) -> None:
+        from group_photos import _build_grouping_prompt
+
+        long_summary = "beach sunset " * 80
+        prompt = _build_grouping_prompt(
+            photos=[
+                {
+                    "photo_id": "p1",
+                    "file_name": "IMG_0001.jpg",
+                    "captured_at": "2026-04-10T09:00:00",
+                    "location_hint": "Busan beach",
+                    "scene_type": "beach",
+                    "summary": long_summary,
+                    "subjects": ["person", "sea", "sand", "sun", "sky", "extra"],
+                    "source_path": "/very/long/local/path/that/should/not/be/sent.jpg",
+                    "raw_ocr": "private text that is irrelevant for grouping",
+                }
+            ],
+            grouping_result={
+                "grouping_strategy": "LOCATION_BASED",
+                "group_count": 1,
+                "groups": [
+                    {
+                        "group_id": "group-001",
+                        "start_time": "2026-04-10T09:00:00",
+                        "end_time": "2026-04-10T09:00:00",
+                        "photo_ids": ["p1"],
+                        "location_hint": "Busan beach",
+                        "group_reason": "initial_group",
+                    }
+                ],
+            },
+        )
+
+        self.assertIn("그룹 후보", prompt)
+        self.assertIn('"photo_id": "p1"', prompt)
+        self.assertIn('"summary": "beach sunset', prompt)
+        self.assertIn("...", prompt)
+        self.assertNotIn("source_path", prompt)
+        self.assertNotIn("raw_ocr", prompt)
+        self.assertNotIn("irrelevant for grouping", prompt)
+        self.assertNotIn("extra", prompt)
+
     def test_그룹화_요청은_선택한_모델명으로_전송한다(self) -> None:
         from group_photos import _call_ollama_grouping_model
 
