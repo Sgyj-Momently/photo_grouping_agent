@@ -1,0 +1,14 @@
+{
+  "samples": [
+    {
+      "name": "real-bundle-v1",
+      "input": "adapted_grouping_input.json",
+      "output": "grouped_compare_qwen_vs_gemma4.json"
+    },
+    {
+      "name": "real-bundle-v2",
+      "input": "adapted_grouping_input_v2.json",
+      "output": "grouped_compare_qwen_vs_gemma4_v2.json"
+    }
+  ]
+}

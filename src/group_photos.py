@@ -3,12 +3,16 @@ from __future__ import annotations
 import argparse
 import copy
 import json
-import re
-from enum import Enum
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 from urllib import request
+
+try:
+    from .boundary_evaluators import evaluate_group_boundary
+    from .strategy_profiles import GroupingStrategy
+except ImportError:  # pragma: no cover - CLI/top-level test import compatibility
+    from boundary_evaluators import evaluate_group_boundary
+    from strategy_profiles import GroupingStrategy
 
 
 DEFAULT_TIME_WINDOW_MINUTES = 90
@@ -16,16 +20,6 @@ DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_GROUPING_MODEL = "qwen2.5:14b"
 DEFAULT_COMPARE_MODELS = ["qwen2.5:14b"]
 DEFAULT_OLLAMA_TIMEOUT_SECONDS = 60
-
-
-class GroupingStrategy(str, Enum):
-    """허용된 그룹화 전략 집합."""
-
-    TIME_BASED = "TIME_BASED"
-    LOCATION_BASED = "LOCATION_BASED"
-    SCENE_BASED = "SCENE_BASED"
-    FOOD_TYPE_BASED = "FOOD_TYPE_BASED"
-    STORY_FLOW_BASED = "STORY_FLOW_BASED"
 
 
 def group_photos(
@@ -47,7 +41,7 @@ def group_photos(
             current_group = [photo]
             continue
 
-        decision = _evaluate_group_boundary(
+        decision = evaluate_group_boundary(
             current_group[-1],
             photo,
             grouping_strategy=grouping_strategy,
@@ -126,9 +120,43 @@ def refine_groups_with_llm(
         result["grouping_llm"]["raw_response"] = raw_response
         return result
 
-    result["group_count"] = parsed.get("group_count", result.get("group_count", 0))
+    parsed, dropped_group_fields = _normalize_model_group_schema(parsed)
+    if dropped_group_fields:
+        result["grouping_llm"]["schema_repair"] = {
+            "dropped_group_fields": dropped_group_fields,
+            "strategy": "keep_allowed_group_fields",
+        }
+
+    parsed, dropped_empty_group_ids = _drop_empty_groups(parsed)
+    if dropped_empty_group_ids:
+        result["grouping_llm"]["structure_repair"] = {
+            "dropped_empty_group_ids": dropped_empty_group_ids,
+            "strategy": "drop_empty_groups",
+        }
+
+    coverage_errors = _validate_group_coverage(photos, parsed.get("groups", []))
+    if _can_repair_missing_photo_ids(coverage_errors):
+        parsed = _repair_missing_photo_ids(parsed, grouping_result, coverage_errors["missing_photo_ids"])
+        result["grouping_llm"]["coverage_repair"] = {
+            "missing_photo_ids": coverage_errors["missing_photo_ids"],
+            "strategy": "append_rule_based_repair_groups",
+        }
+        coverage_errors = _validate_group_coverage(photos, parsed.get("groups", []))
+
+    if coverage_errors:
+        result["grouping_llm"]["status"] = "error: invalid_group_coverage"
+        result["grouping_llm"]["coverage_errors"] = coverage_errors
+        result["grouping_llm"]["raw_response"] = raw_response
+        return result
+
+    result["group_count"] = len(parsed.get("groups", []))
     result["groups"] = parsed.get("groups", result.get("groups", []))
-    result["grouping_llm"]["status"] = "ok"
+    if "coverage_repair" in result["grouping_llm"]:
+        result["grouping_llm"]["status"] = "ok_with_coverage_repair"
+    elif "structure_repair" in result["grouping_llm"]:
+        result["grouping_llm"]["status"] = "ok_with_structure_repair"
+    else:
+        result["grouping_llm"]["status"] = "ok"
     return result
 
 
@@ -156,12 +184,173 @@ def compare_grouping_models(
             {
                 "model": model_name,
                 "status": refined["grouping_llm"]["status"],
+                "coverage_errors": refined["grouping_llm"].get("coverage_errors", {}),
+                "schema_repair": refined["grouping_llm"].get("schema_repair", {}),
+                "coverage_repair": refined["grouping_llm"].get("coverage_repair", {}),
+                "structure_repair": refined["grouping_llm"].get("structure_repair", {}),
                 "group_count": refined.get("group_count"),
                 "groups": refined.get("groups", []),
             }
         )
 
-    return {"comparisons": comparisons}
+    quality_summary = _summarize_model_comparison_quality(
+        base_group_count=grouping_result.get("group_count", 0),
+        comparisons=comparisons,
+    )
+    return {
+        "comparisons": comparisons,
+        "quality_summary": quality_summary,
+        "recommended_model": quality_summary[0]["model"] if quality_summary else None,
+    }
+
+
+def _summarize_model_comparison_quality(
+    base_group_count: int,
+    comparisons: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """모델 비교 결과를 사람이 훑기 쉬운 품질 요약으로 변환한다."""
+
+    summary = []
+    for comparison in comparisons:
+        missing_ids = comparison.get("coverage_repair", {}).get("missing_photo_ids", [])
+        coverage_errors = comparison.get("coverage_errors", {})
+        dropped_group_fields = comparison.get("schema_repair", {}).get("dropped_group_fields", [])
+        dropped_empty_group_ids = comparison.get("structure_repair", {}).get("dropped_empty_group_ids", [])
+        group_count = comparison.get("group_count") or 0
+        summary.append(
+            {
+                "model": comparison.get("model"),
+                "status": comparison.get("status"),
+                "coverage_ok": not coverage_errors,
+                "repair_count": len(missing_ids),
+                "schema_repair_count": len(dropped_group_fields),
+                "structure_repair_count": len(dropped_empty_group_ids),
+                "coverage_error_count": sum(len(ids) for ids in coverage_errors.values()),
+                "group_count": group_count,
+                "group_count_delta_from_rules": group_count - base_group_count,
+            }
+        )
+
+    return sorted(
+        summary,
+        key=lambda item: (
+            not item["coverage_ok"],
+            item["repair_count"],
+            item["schema_repair_count"],
+            item["structure_repair_count"],
+            item["coverage_error_count"],
+            abs(item["group_count_delta_from_rules"]),
+            item["model"] or "",
+        ),
+    )
+
+
+def _normalize_model_group_schema(parsed_result: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """LLM group 객체에서 출력 계약에 없는 필드를 제거한다."""
+
+    allowed_fields = {"group_id", "start_time", "end_time", "photo_ids", "location_hint", "group_reason"}
+    groups = parsed_result.get("groups", [])
+    dropped_fields: set[str] = set()
+    normalized_groups = []
+    for group in groups:
+        dropped_fields.update(set(group) - allowed_fields)
+        normalized_group = {key: group.get(key) for key in allowed_fields if key in group}
+        if not isinstance(normalized_group.get("photo_ids", []), list):
+            normalized_group["photo_ids"] = []
+        normalized_groups.append(normalized_group)
+
+    if not dropped_fields:
+        return parsed_result, []
+
+    repaired = copy.deepcopy(parsed_result)
+    repaired["groups"] = normalized_groups
+    repaired["group_count"] = len(normalized_groups)
+    return repaired, sorted(dropped_fields)
+
+
+def _drop_empty_groups(parsed_result: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """LLM이 만든 빈 그룹을 제거하고 제거한 group_id를 반환한다."""
+
+    groups = parsed_result.get("groups", [])
+    dropped_group_ids = [
+        str(group.get("group_id") or f"group-{index + 1:03d}")
+        for index, group in enumerate(groups)
+        if not group.get("photo_ids")
+    ]
+    if not dropped_group_ids:
+        return parsed_result, []
+
+    repaired = copy.deepcopy(parsed_result)
+    repaired["groups"] = [group for group in groups if group.get("photo_ids")]
+    repaired["group_count"] = len(repaired["groups"])
+    return repaired, dropped_group_ids
+
+
+def _validate_group_coverage(
+    photos: list[dict[str, Any]],
+    groups: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    """LLM 보정 결과가 입력 photo_id를 누락/중복하지 않는지 검증한다."""
+
+    expected_ids = [photo.get("photo_id") for photo in photos if photo.get("photo_id")]
+    seen_ids: list[str] = []
+    for group in groups:
+        seen_ids.extend(photo_id for photo_id in group.get("photo_ids", []) if photo_id)
+
+    expected_set = set(expected_ids)
+    seen_set = set(seen_ids)
+    duplicate_ids = sorted({photo_id for photo_id in seen_ids if seen_ids.count(photo_id) > 1})
+    unexpected_ids = sorted(seen_set - expected_set)
+    missing_ids = sorted(expected_set - seen_set)
+
+    errors: dict[str, list[str]] = {}
+    if missing_ids:
+        errors["missing_photo_ids"] = missing_ids
+    if duplicate_ids:
+        errors["duplicate_photo_ids"] = duplicate_ids
+    if unexpected_ids:
+        errors["unexpected_photo_ids"] = unexpected_ids
+    return errors
+
+
+def _can_repair_missing_photo_ids(coverage_errors: dict[str, list[str]]) -> bool:
+    """누락만 있는 LLM 결과는 규칙 기반 그룹으로 복구 가능하다."""
+
+    return bool(coverage_errors.get("missing_photo_ids")) and not (
+        coverage_errors.get("duplicate_photo_ids") or coverage_errors.get("unexpected_photo_ids")
+    )
+
+
+def _repair_missing_photo_ids(
+    parsed_result: dict[str, Any],
+    rule_based_result: dict[str, Any],
+    missing_photo_ids: list[str],
+) -> dict[str, Any]:
+    """LLM이 누락한 photo_id를 규칙 기반 그룹 조각으로 끝에 붙인다."""
+
+    repaired = copy.deepcopy(parsed_result)
+    groups = list(repaired.get("groups", []))
+    missing_set = set(missing_photo_ids)
+    repair_index = 1
+    for rule_group in rule_based_result.get("groups", []):
+        repair_photo_ids = [photo_id for photo_id in rule_group.get("photo_ids", []) if photo_id in missing_set]
+        if not repair_photo_ids:
+            continue
+        groups.append(
+            {
+                "group_id": f"coverage-repair-{repair_index:03d}",
+                "start_time": rule_group.get("start_time"),
+                "end_time": rule_group.get("end_time"),
+                "photo_ids": repair_photo_ids,
+                "location_hint": rule_group.get("location_hint"),
+                "group_reason": "coverage_repair",
+            }
+        )
+        repair_index += 1
+
+    repaired["groups"] = groups
+    repaired["group_count"] = len(groups)
+    return repaired
 
 
 def _photo_sort_key(photo: dict[str, Any]) -> tuple[int, str]:
@@ -171,91 +360,6 @@ def _photo_sort_key(photo: dict[str, Any]) -> tuple[int, str]:
     if captured_at:
         return (0, captured_at)
     return (1, photo.get("file_name", ""))
-
-
-def _evaluate_group_boundary(
-    previous_photo: dict[str, Any],
-    current_photo: dict[str, Any],
-    grouping_strategy: GroupingStrategy,
-    time_window_minutes: int,
-) -> dict[str, Any]:
-    """시간 차이와 의미 차이를 함께 보고 새 그룹 시작 여부와 근거를 반환한다."""
-
-    if grouping_strategy == GroupingStrategy.TIME_BASED:
-        return _evaluate_time_priority_boundary(previous_photo, current_photo, time_window_minutes)
-
-    if grouping_strategy == GroupingStrategy.FOOD_TYPE_BASED:
-        return _evaluate_food_type_boundary(previous_photo, current_photo)
-
-    previous_time = _parse_datetime(previous_photo.get("captured_at"))
-    current_time = _parse_datetime(current_photo.get("captured_at"))
-
-    if previous_time is not None and current_time is not None:
-        minutes_diff = (current_time - previous_time).total_seconds() / 60
-        if minutes_diff > time_window_minutes:
-            return {
-                "should_split": True,
-                "reason": "time_gap",
-                "score": float(minutes_diff),
-                "score_details": {
-                    "minutes_diff": round(minutes_diff, 2),
-                    "time_window_minutes": time_window_minutes,
-                },
-            }
-
-    # 촬영 시각이 없거나 부족할 때는 장면/위치/요약 유사도로만 분리 여부를 본다.
-    return _evaluate_semantic_distance(previous_photo, current_photo, grouping_strategy)
-
-
-def _evaluate_time_priority_boundary(
-    previous_photo: dict[str, Any],
-    current_photo: dict[str, Any],
-    time_window_minutes: int,
-) -> dict[str, Any]:
-    """시간 중심 전략에서는 시간 단서를 가장 우선한다."""
-
-    previous_time = _parse_datetime(previous_photo.get("captured_at"))
-    current_time = _parse_datetime(current_photo.get("captured_at"))
-
-    if previous_time is None or current_time is None:
-        return {
-            "should_split": False,
-            "reason": "fallback_missing_metadata",
-            "score": 0.0,
-            "score_details": {"strategy": GroupingStrategy.TIME_BASED.value},
-        }
-
-    minutes_diff = (current_time - previous_time).total_seconds() / 60
-    if minutes_diff > time_window_minutes:
-        return {
-            "should_split": True,
-            "reason": "time_gap",
-            "score": float(minutes_diff),
-            "score_details": {
-                "strategy": GroupingStrategy.TIME_BASED.value,
-                "minutes_diff": round(minutes_diff, 2),
-                "time_window_minutes": time_window_minutes,
-            },
-        }
-
-    return {
-        "should_split": False,
-        "reason": "initial_group",
-        "score": max(0.0, float(time_window_minutes - minutes_diff)),
-        "score_details": {
-            "strategy": GroupingStrategy.TIME_BASED.value,
-            "minutes_diff": round(minutes_diff, 2),
-            "time_window_minutes": time_window_minutes,
-        },
-    }
-
-
-def _parse_datetime(raw_value: str | None) -> datetime | None:
-    """ISO 8601 형태의 촬영 시각 문자열을 datetime으로 변환한다."""
-
-    if not raw_value:
-        return None
-    return datetime.fromisoformat(raw_value)
 
 
 def _build_group(
@@ -289,252 +393,6 @@ def _build_group(
     }
 
 
-def _evaluate_semantic_distance(
-    previous_photo: dict[str, Any],
-    current_photo: dict[str, Any],
-    grouping_strategy: GroupingStrategy,
-) -> dict[str, Any]:
-    """시간 정보가 약할 때는 위치/장면/요약 유사도로 서로 다른 이벤트인지 추정한다."""
-
-    previous_scene = _normalize_text(previous_photo.get("scene_type"))
-    current_scene = _normalize_text(current_photo.get("scene_type"))
-    previous_location = _normalize_text(previous_photo.get("location_hint"))
-    current_location = _normalize_text(current_photo.get("location_hint"))
-
-    same_scene = bool(previous_scene and current_scene and previous_scene == current_scene)
-    same_location = bool(
-        previous_location
-        and current_location
-        and (
-            previous_location == current_location
-            or previous_location in current_location
-            or current_location in previous_location
-        )
-    )
-
-    previous_summary_words = _extract_keywords(previous_photo.get("summary"))
-    current_summary_words = _extract_keywords(current_photo.get("summary"))
-    shared_summary_words = previous_summary_words & current_summary_words
-    previous_tags = _derive_semantic_tags(previous_photo, grouping_strategy)
-    current_tags = _derive_semantic_tags(current_photo, grouping_strategy)
-    shared_tags = previous_tags & current_tags
-    conflicting_tags = _has_conflicting_tags(previous_tags, current_tags)
-
-    score = 0.0
-    if same_scene:
-        score += 2.0
-    if same_location:
-        score += 2.0
-    if len(shared_tags) >= 1:
-        score += 1.5
-    if len(shared_summary_words) >= 2:
-        score += 1.5
-    elif len(shared_summary_words) == 1:
-        score += 0.5
-    if conflicting_tags:
-        score -= 2.5
-
-    # 핵심 단서가 모두 다르면 다른 이벤트일 가능성이 크다고 보고 분리한다.
-    has_any_signal = any(
-        [
-            previous_scene,
-            current_scene,
-            previous_location,
-            current_location,
-            previous_summary_words,
-            current_summary_words,
-            previous_tags,
-            current_tags,
-        ]
-    )
-
-    if score > 0:
-        return {
-            "should_split": False,
-            "reason": "initial_group",
-            "score": score,
-            "score_details": {
-                "same_scene": same_scene,
-                "same_location": same_location,
-                "strategy": grouping_strategy.value,
-                "shared_tags": sorted(shared_tags),
-                "conflicting_tags": conflicting_tags,
-                "shared_summary_words": sorted(shared_summary_words),
-            },
-        }
-
-    if has_any_signal:
-        return {
-            "should_split": True,
-            "reason": "semantic_split",
-            "score": 0.0,
-            "score_details": {
-                "same_scene": same_scene,
-                "same_location": same_location,
-                "strategy": grouping_strategy.value,
-                "shared_tags": sorted(shared_tags),
-                "conflicting_tags": conflicting_tags,
-                "shared_summary_words": sorted(shared_summary_words),
-            },
-        }
-
-    return {
-        "should_split": False,
-        "reason": "fallback_missing_metadata",
-        "score": 0.0,
-        "score_details": {
-            "same_scene": same_scene,
-            "same_location": same_location,
-            "strategy": grouping_strategy.value,
-            "shared_tags": sorted(shared_tags),
-            "conflicting_tags": conflicting_tags,
-            "shared_summary_words": sorted(shared_summary_words),
-        },
-    }
-
-
-def _evaluate_food_type_boundary(
-    previous_photo: dict[str, Any],
-    current_photo: dict[str, Any],
-) -> dict[str, Any]:
-    """음식 후기 전략에서는 음식 종류 태그가 가장 중요한 기준이 된다."""
-
-    previous_tags = _derive_semantic_tags(previous_photo, GroupingStrategy.FOOD_TYPE_BASED)
-    current_tags = _derive_semantic_tags(current_photo, GroupingStrategy.FOOD_TYPE_BASED)
-    shared_food_tags = previous_tags & current_tags
-
-    if shared_food_tags:
-        return {
-            "should_split": False,
-            "reason": "initial_group",
-            "score": 3.0,
-            "score_details": {
-                "strategy": GroupingStrategy.FOOD_TYPE_BASED.value,
-                "shared_food_tags": sorted(shared_food_tags),
-            },
-        }
-
-    has_food_signal = bool(previous_tags or current_tags)
-    if has_food_signal:
-        return {
-            "should_split": True,
-            "reason": "food_type_split",
-            "score": 0.0,
-            "score_details": {
-                "strategy": GroupingStrategy.FOOD_TYPE_BASED.value,
-                "previous_food_tags": sorted(previous_tags),
-                "current_food_tags": sorted(current_tags),
-            },
-        }
-
-    return _evaluate_semantic_distance(
-        previous_photo,
-        current_photo,
-        GroupingStrategy.FOOD_TYPE_BASED,
-    )
-
-
-def _normalize_text(raw_value: str | None) -> str:
-    """비교에 필요한 텍스트를 소문자 기준으로 단순 정규화한다."""
-
-    if not raw_value:
-        return ""
-    return " ".join(raw_value.lower().split())
-
-
-def _extract_keywords(raw_value: str | None) -> set[str]:
-    """요약문에서 그룹화 비교에 쓸 핵심 단어 집합을 뽑는다."""
-
-    if not raw_value:
-        return set()
-
-    stopwords = {
-        "the",
-        "a",
-        "an",
-        "in",
-        "on",
-        "at",
-        "with",
-        "and",
-        "of",
-        "to",
-        "near",
-        "while",
-        "under",
-        "this",
-        "that",
-        "is",
-        "are",
-    }
-    words = {
-        word
-        for word in re.findall(r"[a-zA-Z]+", raw_value.lower())
-        if len(word) >= 4 and word not in stopwords
-    }
-    return words
-
-
-def _derive_semantic_tags(photo: dict[str, Any], grouping_strategy: GroupingStrategy) -> set[str]:
-    """scene_type, location_hint, summary에서 그룹화용 의미 태그를 추출한다."""
-
-    text = " ".join(
-        filter(
-            None,
-            [
-                _normalize_text(photo.get("scene_type")),
-                _normalize_text(photo.get("location_hint")),
-                _normalize_text(photo.get("summary")),
-            ],
-        )
-    )
-
-    tag_patterns = {
-        "beach": ["beach", "seaside", "coastal", "sand", "ocean", "sea", "sunset"],
-        "urban": ["urban", "city", "street", "building", "night", "cityscape"],
-        "portrait": ["person", "woman", "man", "people", "adult", "female"],
-        "nature": ["sky", "cloud", "sunset", "water", "outdoor"],
-        "ramen": ["ramen", "noodle", "broth"],
-        "dessert": ["dessert", "cake", "cookie", "icecream", "ice", "sweet"],
-        "coffee": ["coffee", "latte", "espresso", "cafe"],
-        "meat": ["steak", "bbq", "barbecue", "grill", "meat"],
-    }
-
-    tags = set()
-    for tag, keywords in tag_patterns.items():
-        if any(keyword in text for keyword in keywords):
-            tags.add(tag)
-
-    if grouping_strategy == GroupingStrategy.FOOD_TYPE_BASED:
-        return {
-            tag
-            for tag in tags
-            if tag in {"ramen", "dessert", "coffee", "meat"}
-        }
-
-    if grouping_strategy == GroupingStrategy.SCENE_BASED:
-        return {
-            tag
-            for tag in tags
-            if tag in {"beach", "urban", "portrait", "nature"}
-        }
-
-    return tags
-
-
-def _has_conflicting_tags(previous_tags: set[str], current_tags: set[str]) -> bool:
-    """서로 다른 이벤트일 가능성이 높은 의미 태그 조합인지 판정한다."""
-
-    conflicting_pairs = [
-        ({"beach"}, {"urban"}),
-        ({"nature"}, {"urban"}),
-    ]
-    for left, right in conflicting_pairs:
-        if (previous_tags & left and current_tags & right) or (previous_tags & right and current_tags & left):
-            return True
-    return False
-
-
 def _call_ollama_grouping_model(
     photos: list[dict[str, Any]],
     grouping_result: dict[str, Any],
@@ -550,6 +408,9 @@ def _call_ollama_grouping_model(
         "prompt": prompt,
         "stream": False,
         "format": "json",
+        "options": {
+            "temperature": 0,
+        },
     }
 
     http_request = request.Request(
@@ -579,6 +440,11 @@ def _build_grouping_prompt(photos: list[dict[str, Any]], grouping_result: dict[s
 - GPS 또는 location_hint의 일관성
 - scene_type과 요약의 유사성
 - 여행 일정상 자연스러운 흐름
+
+절대 규칙:
+- required_photo_ids의 모든 photo_id를 결과 groups 안에 정확히 한 번씩 포함하라.
+- photo_id를 누락하거나 새로 만들거나 중복 배치하지 마라.
+- 같은 이벤트를 합치거나 다른 이벤트를 나누더라도 photo_id 전체 목록은 보존하라.
 
 그룹 후보:
 {context_json}
@@ -626,6 +492,7 @@ def _build_grouping_llm_context(photos: list[dict[str, Any]], grouping_result: d
     return {
         "grouping_strategy": grouping_result.get("grouping_strategy"),
         "group_count": grouping_result.get("group_count", len(groups)),
+        "required_photo_ids": [photo.get("photo_id") for photo in photos if photo.get("photo_id")],
         "groups": groups,
     }
 
@@ -657,9 +524,9 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Output JSON path")
     parser.add_argument(
         "--grouping-strategy",
-        default=GroupingStrategy.LOCATION_BASED.value,
+        default=None,
         choices=[strategy.value for strategy in GroupingStrategy],
-        help="Grouping strategy enum value",
+        help="Grouping strategy enum value. Defaults to input grouping_strategy, then LOCATION_BASED.",
     )
     parser.add_argument(
         "--time-window-minutes",
@@ -699,7 +566,11 @@ def main() -> None:
     input_path = Path(args.input)
     output_path = Path(args.output)
     payload = json.loads(input_path.read_text(encoding="utf-8"))
-    grouping_strategy = GroupingStrategy(args.grouping_strategy)
+    grouping_strategy = GroupingStrategy(
+        args.grouping_strategy
+        or payload.get("grouping_strategy")
+        or GroupingStrategy.LOCATION_BASED.value
+    )
     base_result = group_photos(
         payload["photos"],
         grouping_strategy=grouping_strategy,

@@ -1,0 +1,298 @@
+{
+  "grouping_strategy": "LOCATION_BASED",
+  "group_count": 6,
+  "groups": [
+    {
+      "group_id": "group-001",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-001",
+        "photo-002"
+      ],
+      "location_hint": "beach or seaside location",
+      "group_reason": "initial_group",
+      "score": 0.0,
+      "score_details": {}
+    },
+    {
+      "group_id": "group-002",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-003",
+        "photo-004"
+      ],
+      "location_hint": "City street",
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "strategy": "LOCATION_BASED",
+        "shared_tags": [
+          "portrait"
+        ],
+        "conflicting_tags": true,
+        "shared_summary_words": [
+          "standing"
+        ],
+        "semantic_score_weights": {
+          "same_scene": 2.0,
+          "same_location": 2.0,
+          "shared_tag": 1.5,
+          "two_or_more_shared_summary_words": 1.5,
+          "one_shared_summary_word": 0.5,
+          "conflicting_tags": -2.5
+        }
+      }
+    },
+    {
+      "group_id": "group-003",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-005",
+        "photo-006"
+      ],
+      "location_hint": null,
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "strategy": "LOCATION_BASED",
+        "shared_tags": [],
+        "conflicting_tags": false,
+        "shared_summary_words": [],
+        "semantic_score_weights": {
+          "same_scene": 2.0,
+          "same_location": 2.0,
+          "shared_tag": 1.5,
+          "two_or_more_shared_summary_words": 1.5,
+          "one_shared_summary_word": 0.5,
+          "conflicting_tags": -2.5
+        }
+      }
+    },
+    {
+      "group_id": "group-004",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-007"
+      ],
+      "location_hint": null,
+      "group_reason": "filename_sequence_gap",
+      "score": 1242.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "strategy": "LOCATION_BASED",
+        "shared_tags": [],
+        "conflicting_tags": false,
+        "shared_summary_words": [],
+        "semantic_score_weights": {
+          "same_scene": 2.0,
+          "same_location": 2.0,
+          "shared_tag": 1.5,
+          "two_or_more_shared_summary_words": 1.5,
+          "one_shared_summary_word": 0.5,
+          "conflicting_tags": -2.5
+        },
+        "filename_sequence_gap": 1242,
+        "filename_sequence_split_gap": 25
+      }
+    },
+    {
+      "group_id": "group-005",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-008"
+      ],
+      "location_hint": "Beach",
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "strategy": "LOCATION_BASED",
+        "shared_tags": [],
+        "conflicting_tags": false,
+        "shared_summary_words": [],
+        "semantic_score_weights": {
+          "same_scene": 2.0,
+          "same_location": 2.0,
+          "shared_tag": 1.5,
+          "two_or_more_shared_summary_words": 1.5,
+          "one_shared_summary_word": 0.5,
+          "conflicting_tags": -2.5
+        }
+      }
+    },
+    {
+      "group_id": "group-006",
+      "start_time": null,
+      "end_time": null,
+      "photo_ids": [
+        "photo-009",
+        "photo-010"
+      ],
+      "location_hint": null,
+      "group_reason": "semantic_split",
+      "score": 0.0,
+      "score_details": {
+        "same_scene": false,
+        "same_location": false,
+        "strategy": "LOCATION_BASED",
+        "shared_tags": [],
+        "conflicting_tags": false,
+        "shared_summary_words": [],
+        "semantic_score_weights": {
+          "same_scene": 2.0,
+          "same_location": 2.0,
+          "shared_tag": 1.5,
+          "two_or_more_shared_summary_words": 1.5,
+          "one_shared_summary_word": 0.5,
+          "conflicting_tags": -2.5
+        }
+      }
+    }
+  ],
+  "comparison_results": {
+    "comparisons": [
+      {
+        "model": "qwen2.5:14b",
+        "status": "ok",
+        "coverage_errors": {},
+        "schema_repair": {},
+        "coverage_repair": {},
+        "structure_repair": {},
+        "group_count": 4,
+        "groups": [
+          {
+            "group_id": "group-001",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-001",
+              "photo-002"
+            ],
+            "location_hint": "beach or seaside location",
+            "group_reason": "initial_group"
+          },
+          {
+            "group_id": "group-007",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-003",
+              "photo-004"
+            ],
+            "location_hint": "City street",
+            "group_reason": "semantic_split"
+          },
+          {
+            "group_id": "group-008",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-005",
+              "photo-006",
+              "photo-007",
+              "photo-009",
+              "photo-010"
+            ],
+            "location_hint": null,
+            "group_reason": "filename_sequence_gap"
+          },
+          {
+            "group_id": "group-009",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-008"
+            ],
+            "location_hint": "Beach",
+            "group_reason": "semantic_split"
+          }
+        ]
+      },
+      {
+        "model": "gemma4:e4b",
+        "status": "ok",
+        "coverage_errors": {},
+        "schema_repair": {},
+        "coverage_repair": {},
+        "structure_repair": {},
+        "group_count": 3,
+        "groups": [
+          {
+            "group_id": "group-001",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-001",
+              "photo-002",
+              "photo-008"
+            ],
+            "location_hint": "Beach",
+            "group_reason": "Coastal activity (Beach/Seaside)"
+          },
+          {
+            "group_id": "group-002",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-003",
+              "photo-004"
+            ],
+            "location_hint": "City street",
+            "group_reason": "Urban exploration (City/Street)"
+          },
+          {
+            "group_id": "group-003",
+            "start_time": null,
+            "end_time": null,
+            "photo_ids": [
+              "photo-005",
+              "photo-006",
+              "photo-007",
+              "photo-009",
+              "photo-010"
+            ],
+            "location_hint": null,
+            "group_reason": "Miscellaneous/Unclassified"
+          }
+        ]
+      }
+    ],
+    "quality_summary": [
+      {
+        "model": "qwen2.5:14b",
+        "status": "ok",
+        "coverage_ok": true,
+        "repair_count": 0,
+        "schema_repair_count": 0,
+        "structure_repair_count": 0,
+        "coverage_error_count": 0,
+        "group_count": 4,
+        "group_count_delta_from_rules": -2
+      },
+      {
+        "model": "gemma4:e4b",
+        "status": "ok",
+        "coverage_ok": true,
+        "repair_count": 0,
+        "schema_repair_count": 0,
+        "structure_repair_count": 0,
+        "coverage_error_count": 0,
+        "group_count": 3,
+        "group_count_delta_from_rules": -3
+      }
+    ],
+    "recommended_model": "qwen2.5:14b"
+  },
+  "sample_name": "real-bundle-v2"
+}
