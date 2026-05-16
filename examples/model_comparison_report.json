@@ -1,0 +1,42 @@
+{
+  "sample_count": 2,
+  "samples": [
+    {
+      "sample_name": "real-bundle-v1",
+      "recommended_model": "qwen2.5:14b",
+      "grouping_strategy": "LOCATION_BASED",
+      "base_group_count": 6
+    },
+    {
+      "sample_name": "real-bundle-v2",
+      "recommended_model": "qwen2.5:14b",
+      "grouping_strategy": "LOCATION_BASED",
+      "base_group_count": 6
+    }
+  ],
+  "model_summaries": [
+    {
+      "model": "qwen2.5:14b",
+      "sample_count": 2,
+      "recommendation_count": 2,
+      "coverage_ok_count": 2,
+      "repair_count_total": 0,
+      "schema_repair_count_total": 0,
+      "structure_repair_count_total": 0,
+      "coverage_error_count_total": 0,
+      "average_abs_group_delta": 2.0
+    },
+    {
+      "model": "gemma4:e4b",
+      "sample_count": 2,
+      "recommendation_count": 0,
+      "coverage_ok_count": 2,
+      "repair_count_total": 0,
+      "schema_repair_count_total": 0,
+      "structure_repair_count_total": 0,
+      "coverage_error_count_total": 0,
+      "average_abs_group_delta": 3.0
+    }
+  ],
+  "recommended_model": "qwen2.5:14b"
+}
