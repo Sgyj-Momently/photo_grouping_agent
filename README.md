@@ -14,6 +14,8 @@
 - GPS/위치 힌트 비교를 위한 확장 지점 제공
 - 그룹별 시작 시각, 종료 시각, 사진 목록 생성
 - enum 기반 그룹화 전략 선택
+- 전략별 의미 태그 필터, 의미 점수 가중치, boundary evaluator 분리
+- 메타데이터가 부족한 사진의 파일명 숫자 순서 gap fallback
 - 선택한 Ollama 텍스트 모델로 그룹 보정
 - `qwen2.5`와 `gemma4` 비교 실험 결과 저장
 
@@ -57,6 +59,34 @@ python3 src/group_photos.py \
   --output ./examples/grouped_output.compare.json \
   --compare-models qwen2.5:14b gemma4:e4b gemma4:26b
 ```
+
+반복 비교 실험은 스크립트로도 실행할 수 있다.
+
+```bash
+scripts/compare-models.sh \
+  ./examples/adapted_grouping_input.json \
+  ./examples/grouped_compare_qwen_vs_gemma4.json \
+  qwen2.5:14b gemma4:e4b
+```
+
+여러 비교 결과를 집계하려면:
+
+```bash
+scripts/report-model-comparisons.sh
+```
+
+현재 예제 입력 묶음 전체를 비교하고 리포트까지 갱신하려면:
+
+```bash
+scripts/compare-sample-suite.sh qwen2.5:14b gemma4:e4b
+```
+
+샘플 묶음은 `examples/model_comparison_samples.json`에서 관리한다.
+
+기본 출력:
+
+- `examples/model_comparison_report.json`
+- `examples/model_comparison_report.md`
 
 ## 1번 결과 연결
 
@@ -155,4 +185,12 @@ python3 -m coverage report -m --fail-under=85
 
 - 먼저 규칙 기반 결과를 만들고, 그다음 LLM 보정은 선택적으로 켠다.
 - 모델 비교는 동일 입력에 대해 `comparison_results`를 남겨 품질 차이를 확인하는 용도로 사용한다.
+- LLM 보정 결과가 입력 `photo_id`를 누락하면 규칙 기반 그룹 조각으로 `coverage_repair`를 붙인다.
+- LLM 보정 결과가 `photo_id`를 중복하거나 새로 만들면 `invalid_group_coverage`로 처리하고 규칙 기반 결과를 유지한다.
+- LLM 보정 결과 group 객체에 계약 외 필드가 있으면 `schema_repair`로 허용 필드만 남긴다.
+- 모델 비교 결과의 `quality_summary`는 커버리지, repair 수, 규칙 기반 그룹 수와의 차이를 요약한다.
+- 모델 비교 결과의 `recommended_model`은 `quality_summary` 정렬 기준상 가장 먼저 검토할 모델을 가리킨다.
+- 여러 비교 파일의 집계 리포트는 샘플별 추천 횟수, repair 수, 평균 그룹 수 차이를 합산한다.
+- `compare-models.sh`는 입력 JSON의 `grouping_strategy`를 기본값으로 사용하고, 없으면 `LOCATION_BASED`를 사용한다.
+- Ollama 비교 호출은 재현성을 위해 `temperature: 0`으로 실행한다.
 - 전체 순서 제어는 여전히 Spring 오케스트레이터가 맡고, 이 모듈은 그룹화 결과 생성만 담당한다.
