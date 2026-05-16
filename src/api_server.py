@@ -61,7 +61,7 @@ class GroupingRequest(BaseModel):
 def health() -> dict[str, str]:
     """오케스트레이터에서 살아있는지 확인하는 단순 헬스 체크."""
 
-    return {"status": "ok"}
+    return {"status": "ok", "service": "photo_grouping_agent"}
 
 
 @app.post("/api/v1/photo-groups")
