@@ -744,13 +744,20 @@ class ModelComparisonReportTest(unittest.TestCase):
 
         self.assertEqual(report["sample_count"], 2)
         self.assertEqual(report["recommended_model"], "gemma4:e4b")
+        self.assertEqual(report["confidence"]["level"], "low")
+        self.assertIn("Need at least 5 comparison samples", report["confidence"]["warnings"][0])
         gemma_summary = next(item for item in report["model_summaries"] if item["model"] == "gemma4:e4b")
         qwen_summary = next(item for item in report["model_summaries"] if item["model"] == "qwen2.5:14b")
+        scene_summary = next(item for item in report["strategy_summaries"] if item["grouping_strategy"] == "SCENE_BASED")
         self.assertEqual(gemma_summary["recommendation_count"], 1)
         self.assertEqual(gemma_summary["schema_repair_count_total"], 1)
         self.assertEqual(qwen_summary["repair_count_total"], 2)
+        self.assertEqual(scene_summary["recommended_models"], {"qwen2.5:14b": 1})
 
         markdown = render_markdown_report(report)
+        self.assertIn("- confidence_level: low", markdown)
+        self.assertIn("## Strategy Coverage", markdown)
+        self.assertIn("| SCENE_BASED | 1 | 2/2 | qwen2.5:14b: 1 |", markdown)
         self.assertIn("| gemma4:e4b |", markdown)
         self.assertIn("| sample-a | LOCATION_BASED | gemma4:e4b | 6 |", markdown)
 

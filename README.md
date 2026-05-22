@@ -88,6 +88,8 @@ scripts/compare-sample-suite.sh qwen2.5:14b gemma4:e4b
 - `examples/model_comparison_report.json`
 - `examples/model_comparison_report.md`
 
+리포트는 모델별 추천 횟수뿐 아니라 전략별 샘플 커버리지와 `confidence_level`을 함께 출력한다. 현재 suite는 샘플 2개와 `LOCATION_BASED` 전략만 포함하므로 추천 모델은 참고값이며, 안정 판단 전 최소 5개 샘플과 3개 이상 전략 샘플을 채운다.
+
 ## 1번 결과 연결
 
 `photo_exif_llm_pipeline`의 `bundle.json`을 이 에이전트 입력 형식으로 바꿀 수 있다.
