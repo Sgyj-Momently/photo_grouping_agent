@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from .group_photos import (
     DEFAULT_GROUPING_MODEL,
@@ -25,6 +26,7 @@ app = FastAPI(
     description="사진 정보 목록을 받아 그룹화 결과를 반환하는 에이전트 API",
 )
 
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL)
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", str(DEFAULT_OLLAMA_TIMEOUT_SECONDS)))
