@@ -1139,6 +1139,17 @@ class ApiServerTest(unittest.TestCase):
         self.assertEqual(body["project_id"], "project-001")
         self.assertEqual(body["group_count"], 2)
 
+    def test_metrics_endpoint_returns_prometheus_data(self) -> None:
+        from fastapi.testclient import TestClient
+        from src.api_server import app
+
+        client = TestClient(app)
+
+        response = client.get("/metrics")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("http_request_duration_seconds", response.text)
+
     def test_photo_groups_endpoint_can_call_llm_refinement_and_model_compare(self) -> None:
         from fastapi.testclient import TestClient
         import src.api_server as api_server
