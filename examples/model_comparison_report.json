@@ -38,5 +38,26 @@
       "average_abs_group_delta": 3.0
     }
   ],
+  "strategy_summaries": [
+    {
+      "grouping_strategy": "LOCATION_BASED",
+      "sample_count": 2,
+      "model_sample_count": 4,
+      "coverage_ok_count": 4,
+      "coverage_ok_ratio": 1.0,
+      "recommended_models": {
+        "qwen2.5:14b": 2
+      }
+    }
+  ],
+  "confidence": {
+    "level": "low",
+    "sample_count": 2,
+    "strategy_count": 1,
+    "warnings": [
+      "Need at least 5 comparison samples before treating the recommended model as stable.",
+      "Need samples from at least 3 grouping strategies to reduce strategy bias."
+    ]
+  },
   "recommended_model": "qwen2.5:14b"
 }
