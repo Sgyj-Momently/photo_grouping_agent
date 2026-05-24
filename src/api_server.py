@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from .error_envelope import install_envelope_handlers
 from .group_photos import (
     DEFAULT_GROUPING_MODEL,
     DEFAULT_OLLAMA_BASE_URL,
@@ -25,6 +26,9 @@ app = FastAPI(
     version="1.0.0",
     description="사진 정보 목록을 받아 그룹화 결과를 반환하는 에이전트 API",
 )
+
+# ADR 005 표준 에러 envelope 등록.
+install_envelope_handlers(app)
 
 Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
